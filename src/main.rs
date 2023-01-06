@@ -22,14 +22,16 @@ use vst::event::MidiEvent;
 use vst::host::{HostBuffer, PluginLoader};
 use vst::plugin::Plugin;
 
-use crate::timed_event::TimedEvent;
+use crate::timed_event::TimedEventPlayer;
 pub mod timed_event;
 
 use crate::sample_host::SampleHost;
 pub mod sample_host;
 
-use crate::sample_sequence::build_sequence;
-pub mod sample_sequence;
+use crate::schala::build_schala;
+pub mod schala;
+
+pub mod cmd_sequence;
 
 fn main() {
     let host = Arc::new(Mutex::new(SampleHost));
@@ -50,7 +52,6 @@ fn main() {
     plugin.init();
     println!("Initialized instance!");
 
-
     println!("Setting up audio and event buffers");
 
     let mut host_buffer: HostBuffer<f32> = HostBuffer::new(0, CHANNELS);
@@ -62,7 +63,7 @@ fn main() {
 
     const STEP: usize = 16;
 
-    let sequence: Vec<TimedEvent> = build_sequence(STEP);
+    let sequence = build_schala(STEP);
 
     /* 6 bars of music */
     const FRAME_COUNT: usize = STEP * 192;
@@ -71,19 +72,13 @@ fn main() {
     plugin.resume();
 
     let mut collected: Vec<f32> = vec![0.0; FRAME_COUNT * FRAME_SIZE * 2];
-    let mut seq_index = 0;
     let mut events: Vec<MidiEvent> = Vec::with_capacity(EVENT_BUFFER_SIZE);
-    let mut next_frame: usize = 0;
+    let mut event_player = TimedEventPlayer::new(&sequence);
 
     for f in 0..FRAME_COUNT {
-        let events = &mut events;
-        events.clear();
-
-        while seq_index < sequence.len() && next_frame == f {
-            let seq_event = &sequence[seq_index];
-            events.push(seq_event.event);
-            next_frame = f + seq_event.frame_len;
-            seq_index += 1;
+        match f {
+            0 => event_player.play(0, &mut events),
+            _ => event_player.play(1, &mut events),
         }
 
         if events.len() > 0 {

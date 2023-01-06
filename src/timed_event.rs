@@ -1,32 +1,73 @@
-use midi_types::Note;
 use vst::event::MidiEvent;
 
 pub struct TimedEvent {
     /* we don't have a tick system yet, so we're just snapping to frame */
-    pub frame_len: usize,
+    pub frames: usize,
     pub event: MidiEvent,
 }
 
 impl TimedEvent {
-    fn new(frame_len: usize, event: MidiEvent) -> Self {
-        TimedEvent {
-            frame_len: frame_len,
-            event: event,
+    pub fn new(frames: usize, event: MidiEvent) -> Self {
+        TimedEvent { frames, event }
+    }
+}
+
+pub enum SequenceType {
+    Absolute,
+    Relative,
+}
+
+pub struct EventSequence {
+    pub events: Vec<TimedEvent>,
+    pub sequence_type: SequenceType,
+}
+
+impl EventSequence {
+    pub fn new(events: Vec<TimedEvent>, sequence_type: SequenceType) -> Self {
+        EventSequence {
+            events,
+            sequence_type,
         }
     }
 }
 
-pub fn build_timed_note(frame_len: usize, channel: u8, note: Note, velocity: u8) -> TimedEvent {
-    TimedEvent::new(
-        frame_len,
-        MidiEvent {
-            data: [0x90 + channel, note.into(), velocity],
-            delta_frames: 0,
-            live: true,
-            note_length: None,
-            note_offset: None,
-            detune: 0,
-            note_off_velocity: 0,
-        },
-    )
+pub struct TimedEventPlayer<'a> {
+    sequence: &'a EventSequence,
+    event_index: usize,
+    current_frame: usize,
+    next_frame: usize,
+}
+
+impl<'a> TimedEventPlayer<'a> {
+    pub fn new(sequence: &'a EventSequence) -> Self {
+        TimedEventPlayer {
+            sequence,
+            event_index: 0,
+            current_frame: 0,
+            next_frame: 0,
+        }
+    }
+
+    pub fn play(&mut self, delta: usize, event_buffer: &mut Vec<MidiEvent>) {
+        event_buffer.clear();
+        self.current_frame += delta;
+
+        while self.event_index < self.sequence.events.len() {
+            let seq_event = &self.sequence.events[self.event_index];
+            let should_fire = match self.sequence.sequence_type {
+                SequenceType::Absolute => self.current_frame >= seq_event.frames,
+                SequenceType::Relative => self.current_frame >= self.next_frame,
+            };
+
+            if !should_fire {
+                break;
+            }
+
+            event_buffer.push(seq_event.event);
+            if let SequenceType::Relative = self.sequence.sequence_type {
+                self.next_frame = self.current_frame + seq_event.frames;
+            }
+            self.event_index += 1;
+        }
+    }
 }
