@@ -31,15 +31,15 @@ impl EventSequence {
     }
 }
 
-pub struct TimedEventPlayer<'a> {
-    sequence: &'a EventSequence,
+pub struct TimedEventPlayer {
+    sequence: EventSequence,
     event_index: usize,
     current_frame: usize,
     next_frame: usize,
 }
 
-impl<'a> TimedEventPlayer<'a> {
-    pub fn new(sequence: &'a EventSequence) -> Self {
+impl TimedEventPlayer {
+    pub fn new(sequence: EventSequence) -> Self {
         TimedEventPlayer {
             sequence,
             event_index: 0,
