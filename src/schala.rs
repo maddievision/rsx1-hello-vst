@@ -1,5 +1,5 @@
 use crate::cmd_sequence::{TimedCmdEvent, Note, Cmd, NoteEvent, Playlist, CmdSequence};
-use crate::timed_event::{EventSequence}
+use crate::timed_event::{EventSequence};
 
 pub fn build_timed_note(frames: usize, channel: u8, note: Note, velocity: u8) -> TimedCmdEvent {
   TimedCmdEvent::new(
