@@ -12,3 +12,5 @@ Note that [chipsynth SFC](https://www.plogue.com/products/chipsynth-sfc.html) is
 Video example: https://streamable.com/f98brn
 
 The MIDI file is a sequence of Schala's Theme from Chrono Trigger, and the chipsynth SFC instance presets are loaded with samples from the original song.
+
+![Preview](/preview.png)
