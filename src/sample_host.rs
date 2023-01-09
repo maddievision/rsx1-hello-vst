@@ -1,12 +1,10 @@
 const EVENT_BUFFER_SIZE: usize = 512;
 
+use crossbeam::channel::Sender;
 use std::{
     path::Path,
     sync::{Arc, Mutex},
 };
-
-use crossbeam::channel::Sender;
-
 use vst::{
     event::MidiEvent,
     host::{Host, PluginInstance, PluginLoader},

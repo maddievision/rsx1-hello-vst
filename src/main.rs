@@ -1,9 +1,13 @@
 const FRAME_SIZE: usize = 1024;
 const SAMPLE_RATE: u32 = 48000;
 
-use std::{fs, rc::Rc, thread};
 use crossbeam::channel::bounded;
-
+use midi_logger::log_midi_event;
+use midi_player::MidiPlayer;
+use midly::Smf;
+use sample_host::VstHost;
+use std::{fs, rc::Rc, thread};
+use vst::{host::HostBuffer, prelude::Plugin};
 use winit::{
     dpi::{LogicalSize, PhysicalPosition},
     event::{Event, WindowEvent},
@@ -11,13 +15,6 @@ use winit::{
     platform::macos::WindowExtMacOS,
     window::{Window, WindowBuilder},
 };
-
-use vst::{host::HostBuffer, prelude::Plugin};
-use midly::Smf;
-
-use midi_player::MidiPlayer;
-use sample_host::VstHost;
-use midi_logger::log_midi_event;
 
 extern crate vst;
 
@@ -59,7 +56,7 @@ fn main() {
             let (w, h) = x.size();
             window.set_resizable(false);
             window.set_inner_size(LogicalSize::new(w as f32, h as f32));
-            window.set_title(&device.get_info().name);
+            window.set_title(&format!("{} (Device {})", &device.get_info().name, i));
             if let Some(PhysicalPosition { x, y }) = last_position {
                 // position window below/right from the previous
                 window.set_outer_position(PhysicalPosition::new(x + 40, y + 40));
