@@ -1,7 +1,7 @@
 const EVENT_BUFFER_SIZE: usize = 512;
 
-use midly::{MetaMessage, MidiMessage, PitchBend, Smf, TrackEvent, TrackEventKind};
 use std::rc::Rc;
+use midly::{MetaMessage, MidiMessage, PitchBend, Smf, TrackEvent, TrackEventKind};
 use vst::event::MidiEvent;
 
 #[derive(Debug)]

@@ -1,15 +1,17 @@
 const EVENT_BUFFER_SIZE: usize = 512;
 
-use crossbeam::channel::Sender;
-use std::path::Path;
-use std::sync::{Arc, Mutex};
-use vst::host::{Host, PluginInstance};
-use vst::prelude::AudioBuffer;
+use std::{
+    path::Path,
+    sync::{Arc, Mutex},
+};
 
-use vst::buffer::SendEventBuffer;
-use vst::event::MidiEvent;
-use vst::host::PluginLoader;
-use vst::plugin::Plugin;
+use crossbeam::channel::Sender;
+
+use vst::{
+    event::MidiEvent,
+    host::{Host, PluginInstance, PluginLoader},
+    prelude::{AudioBuffer, Plugin, SendEventBuffer},
+};
 
 pub struct SampleHost;
 
@@ -21,14 +23,18 @@ impl Host for SampleHost {
 
 pub struct VstHost {
     host: Arc<Mutex<SampleHost>>,
-    devices: Vec<PluginInstance>,
+    pub devices: Vec<PluginInstance>,
     sample_rate: f32,
 }
 
 impl VstHost {
     pub fn new(sample_rate: f32) -> Self {
         let host = Arc::new(Mutex::new(SampleHost));
-        VstHost { host, devices: vec![], sample_rate }
+        VstHost {
+            host,
+            devices: vec![],
+            sample_rate,
+        }
     }
 
     pub fn create_device(&mut self, plugin_path: String, preset_path: String) -> usize {
@@ -66,7 +72,7 @@ impl VstHost {
         let mut send_event_buffer = SendEventBuffer::new(EVENT_BUFFER_SIZE);
 
         for (idx, device) in self.devices.iter_mut().enumerate() {
-            let events = &device_events[idx];            
+            let events = &device_events[idx];
             if events.len() > 0 {
                 send_event_buffer.store_events(events.as_slice());
                 device.process_events(send_event_buffer.events());
@@ -81,7 +87,6 @@ impl VstHost {
                     frame[i * 2 + c] += *sample;
                 }
             }
-
         }
 
         match tx.send(frame) {

@@ -2,6 +2,7 @@
 
 Sample VST instrument host that:
 * Loads two instances of a chipsynth SFC with separate FXP preset files 
+* Displays the editors for the instances
 * Loads a MIDI file
 * Routes the MIDI file events to the appropriate instances
 * Mixes the audio from both instances and plays in realtime
