@@ -7,7 +7,6 @@ edition = "2021"
 
 [dependencies]
 vst = "0.3.0"
-wav = "1.0.0"
-midi-types = "0.1.5"
 cpal = "0.14.2"
 crossbeam = "0.8.2"
+midly = "0.5.3"

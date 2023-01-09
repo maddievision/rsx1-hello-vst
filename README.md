@@ -1,28 +1,13 @@
 # hello_vst
 
-Sample VST host that:
-* Loads a plugin
-* Loads an FXB preset into the plugin
-* Constructs a sequence of MIDI events
-* Sends MIDI events to the plugin while capturing its output
-* Write the output to a WAV file
+Sample VST instrument host that:
+* Loads two instances of a chipsynth SFC with separate FXP preset files 
+* Loads a MIDI file
+* Routes the MIDI file events to the appropriate instances
+* Mixes the audio from both instances and plays in realtime
 
-Included in the repo is an [MP3 file](/out/schala.mp3) of the output.
+Note that [chipsynth SFC](https://www.plogue.com/products/chipsynth-sfc.html) is required to run this as-is, but you can stub out the path for a different VST instrument.
 
-<audio src="/out/schala.mp3" controls>Your browser does not support the audio tag.</audio>
+Video example: https://streamable.com/f98brn
 
-Sample console output:
-
-```
-$ cargo run
-   Compiling hello_vst v0.1.0 (/Users/maddievision/code/rs/hello_vst)
-    Finished dev [unoptimized + debuginfo] target(s) in 0.59s
-     Running `target/debug/hello_vst`
-Loaded plugin: chipsynth SFC
-Loading preset: data/schala.fxb
-Initialized instance!
-Setting up audio and event buffers
-Starting MIDI event sequence and output capture
-Writing output to file out/schala.wav:
-Closing instance...
-```
+The MIDI file is a sequence of Schala's Theme from Chrono Trigger, and the chipsynth SFC instance presets are loaded with samples from the original song.

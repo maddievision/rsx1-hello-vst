@@ -1,8 +1,4 @@
-const PLUGIN_PATH: &str =
-    "/Library/Audio/Plug-Ins/VST/chipsynth SFC.vst/Contents/MacOS/chipsynth SFC";
-const PRESET_PATH: &str = "data/schala.fxb";
-const FRAME_SIZE: usize = 256;
-const EVENT_BUFFER_SIZE: usize = 256;
+const EVENT_BUFFER_SIZE: usize = 512;
 
 use crossbeam::channel::Sender;
 use std::path::Path;
@@ -25,62 +21,71 @@ impl Host for SampleHost {
 
 pub struct VstHost {
     host: Arc<Mutex<SampleHost>>,
-    plugin: PluginInstance,
+    devices: Vec<PluginInstance>,
+    sample_rate: f32,
 }
 
 impl VstHost {
     pub fn new(sample_rate: f32) -> Self {
         let host = Arc::new(Mutex::new(SampleHost));
-        let path = Path::new(PLUGIN_PATH);
+        VstHost { host, devices: vec![], sample_rate }
+    }
 
-        let mut loader = PluginLoader::load(path, host.clone()).unwrap();
+    pub fn create_device(&mut self, plugin_path: String, preset_path: String) -> usize {
+        let device_idx = self.devices.len();
+        let path = Path::new(&plugin_path);
+
+        let mut loader = PluginLoader::load(path, self.host.clone()).unwrap();
         let mut plugin = loader.instance().unwrap();
 
-        println!("Loaded plugin: {}", plugin.get_info().name);
-        plugin.set_sample_rate(sample_rate);
+        println!("Loaded device {}: {}", device_idx, plugin.get_info().name);
+        plugin.set_sample_rate(self.sample_rate);
 
-        println!("Loading preset: {}", PRESET_PATH);
-        let preset_bytes = std::fs::read(PRESET_PATH).expect("cannot load preset file");
+        println!("Loading device {} preset: {}", device_idx, preset_path);
+        let preset_bytes = std::fs::read(preset_path).expect("cannot load preset file");
         plugin
             .get_parameter_object()
             .load_preset_data(&preset_bytes);
 
         plugin.init();
         plugin.resume();
-        println!("Initialized instance!");
+        println!("Initialized device {}!", device_idx);
 
-        VstHost { host, plugin }
+        self.devices.push(plugin);
+
+        device_idx
     }
 
     pub fn process_audio(
         &mut self,
         tx: Sender<Vec<f32>>,
         audio_buffer: &mut AudioBuffer<f32>,
-        events: Vec<MidiEvent>,
+        device_events: Vec<Vec<MidiEvent>>,
     ) {
-        let mut frame: Vec<f32> = vec![0.0; FRAME_SIZE * 2];
+        let mut frame: Vec<f32> = vec![0.0; audio_buffer.samples() * 2];
         let mut send_event_buffer = SendEventBuffer::new(EVENT_BUFFER_SIZE);
 
-        if events.len() > 0 {
-            send_event_buffer.store_events(events.as_slice());
-            self.plugin.process_events(send_event_buffer.events());
-        }
-
-        self.plugin.process(audio_buffer);
-        let (_, outputs) = audio_buffer.split();
-
-        for c in 0..outputs.len() {
-            let output = outputs.get(c);
-            for (i, sample) in output.iter().enumerate() {
-                frame[i * 2 + c] = *sample;
+        for (idx, device) in self.devices.iter_mut().enumerate() {
+            let events = &device_events[idx];            
+            if events.len() > 0 {
+                send_event_buffer.store_events(events.as_slice());
+                device.process_events(send_event_buffer.events());
             }
+
+            device.process(audio_buffer);
+            let (_, outputs) = audio_buffer.split();
+
+            for c in 0..outputs.len() {
+                let output = outputs.get(c);
+                for (i, sample) in output.iter().enumerate() {
+                    frame[i * 2 + c] += *sample;
+                }
+            }
+
         }
 
-        // println!("sending frame!");
         match tx.send(frame) {
-            Ok(_) => {
-                // println!("sent frame!");
-            }
+            Ok(_) => (),
             Err(e) => {
                 println!("error sending frame {}", e);
             }
