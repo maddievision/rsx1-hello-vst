@@ -8,7 +8,7 @@ use midly::Smf;
 use sample_host::VstHost;
 use serde::{Deserialize, Serialize};
 use std::{env, fs, path::Path, rc::Rc, thread};
-use vst::{host::HostBuffer, prelude::Plugin};
+use vst::prelude::Plugin;
 use winit::{
     dpi::{LogicalSize, PhysicalPosition},
     event::{Event, WindowEvent},
@@ -28,7 +28,7 @@ pub mod sample_host;
 pub struct ProjectDevice {
     pub name: String,
     pub vst_name: String,
-    pub preset: String,
+    pub preset: Option<String>,
     pub mix_level: f32,
     pub device_filter: usize,
 }
@@ -49,9 +49,7 @@ fn main() {
     }
 
     let project_base_path = Path::new(&args[1]);
-
     let project_data = fs::read(project_base_path.join("project.yml")).unwrap();
-
     let project: Project = serde_yaml::from_slice(&project_data).unwrap();
 
     let sequence = project_base_path
@@ -67,17 +65,18 @@ fn main() {
     let (tx, rx) = bounded::<Vec<f32>>(8);
     let _stream = audio_host::start(rx.clone(), SAMPLE_RATE, FRAME_SIZE as u32);
 
-    let mut vst_host = VstHost::new(SAMPLE_RATE as f32);
+    let mut vst_host = VstHost::new(SAMPLE_RATE as f32, FRAME_SIZE);
 
     for project_device in project.devices {
+        let preset_path = match project_device.preset {
+            Some(preset) => Some(project_base_path.join(preset).to_str().unwrap().to_string()),
+            None => None,
+        };
+
         vst_host.create_device(
             project_device.name,
             project_device.vst_name,
-            project_base_path
-                .join(project_device.preset)
-                .to_str()
-                .unwrap()
-                .to_string(),
+            preset_path,
             project_device.mix_level,
             project_device.device_filter,
         );
@@ -121,11 +120,6 @@ fn main() {
         let smf = Smf::parse(&bytes).unwrap();
         let sequence: Rc<midi_player::MidiSequence> = Rc::new(smf.into());
 
-        let mut host_buffer: HostBuffer<f32> = HostBuffer::new(0, 2);
-        let inputs = vec![vec![0.0; FRAME_SIZE]; 0];
-        let mut outputs = vec![vec![0.0; FRAME_SIZE]; 2];
-        let mut audio_buffer = host_buffer.bind(&inputs, &mut outputs);
-        const STEP: usize = 16;
         let mut midi_players: Vec<MidiPlayer> = vst_host
             .devices
             .iter()
@@ -153,11 +147,9 @@ fn main() {
                 }
             }
 
-            vst_host.process_audio(tx.clone(), &mut audio_buffer, device_events);
+            vst_host.process_audio(tx.clone(), device_events);
         }
     });
-
-    // _vst_processing_thread.join();
 
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Wait;

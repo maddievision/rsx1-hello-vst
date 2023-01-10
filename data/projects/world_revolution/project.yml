@@ -1,6 +1,7 @@
 name: "World Revolution"
 description: The MIDI file is a sequence of World Revolution from Chrono Trigger, and the chipsynth SFC instance presets are loaded with samples from the original song.
 project_file_version: 0
+sequence: worldrev.mid
 devices:
   - name: synth
     vst_name: chipsynth SFC
@@ -67,4 +68,3 @@ devices:
     preset: 12.fxp
     mix_level: 0.7
     device_filter: 12
-sequence: worldrev.mid
