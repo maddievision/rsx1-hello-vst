@@ -1,0 +1,15 @@
+name: "Schala's Theme"
+description: The MIDI file is a sequence of Schala's Theme from Chrono Trigger, and the chipsynth SFC instance presets are loaded with samples from the original song.
+project_file_version: 0
+devices:
+  - name: Instruments
+    vst_name: chipsynth SFC
+    preset: schala_inst.fxp
+    mix_level: 0.7
+    device_filter: 0
+  - name: Percussion
+    vst_name: chipsynth SFC
+    preset: schala_perc.fxp
+    mix_level: 0.7
+    device_filter: 1
+sequence: schala.mid

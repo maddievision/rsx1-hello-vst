@@ -120,25 +120,33 @@ impl<'a> MidiPlayer<'a> {
                 }
             }
 
-            if let TrackEventKind::Midi {
-                channel: _,
-                message,
-            } = evt.event.kind
-            {
-                if let MidiMessage::Controller {
-                    controller,
-                    value: _,
-                } = message
-                {
+            // special meta event-like controllers
+            if let TrackEventKind::Midi { channel, message } = evt.event.kind {
+                if let MidiMessage::Controller { controller, value } = message {
                     match u8::from(controller) {
                         112 => {
+                            // loop start
                             self.loop_index = Some(self.event_index);
                         }
                         113 => {
+                            // loop end
                             if let Some(idx) = self.loop_index {
                                 self.event_index = idx;
                                 let levt = &self.sequence.events[idx];
                                 self.last_event_tick = levt.ts_ticks;
+                                event_buffer.push(MidiEvent {
+                                    data: [
+                                        0xB0 + u8::from(channel),
+                                        u8::from(controller),
+                                        u8::from(value),
+                                    ],
+                                    delta_frames: target_frame as i32,
+                                    live: false,
+                                    note_length: None,
+                                    note_offset: None,
+                                    detune: 0,
+                                    note_off_velocity: 0,
+                                });
                                 continue;
                             }
                         }

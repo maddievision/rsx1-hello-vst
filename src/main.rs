@@ -6,7 +6,8 @@ use midi_logger::log_midi_event;
 use midi_player::MidiPlayer;
 use midly::Smf;
 use sample_host::VstHost;
-use std::{fs, rc::Rc, thread};
+use serde::{Deserialize, Serialize};
+use std::{env, fs, path::Path, rc::Rc, thread};
 use vst::{host::HostBuffer, prelude::Plugin};
 use winit::{
     dpi::{LogicalSize, PhysicalPosition},
@@ -23,52 +24,100 @@ pub mod midi_logger;
 pub mod midi_player;
 pub mod sample_host;
 
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+pub struct ProjectDevice {
+    pub name: String,
+    pub vst_name: String,
+    pub preset: String,
+    pub mix_level: f32,
+    pub device_filter: usize,
+}
+
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+pub struct Project {
+    pub name: String,
+    pub description: String,
+    pub project_file_version: i32,
+    pub devices: Vec<ProjectDevice>,
+    pub sequence: String,
+}
+
 fn main() {
-    // Load bytes into a buffer
+    let args: Vec<String> = env::args().collect();
+    if args.len() < 2 {
+        panic!("no filename supplied!!")
+    }
+
+    let project_base_path = Path::new(&args[1]);
+
+    let project_data = fs::read(project_base_path.join("project.yml")).unwrap();
+
+    let project: Project = serde_yaml::from_slice(&project_data).unwrap();
+
+    let sequence = project_base_path
+        .join(project.sequence)
+        .to_str()
+        .unwrap()
+        .to_string();
+
+    println!("Loaded project: {}", project_base_path.to_str().unwrap());
+    println!("Name: {}", project.name);
+    println!("{}", project.description);
 
     let (tx, rx) = bounded::<Vec<f32>>(8);
     let _stream = audio_host::start(rx.clone(), SAMPLE_RATE, FRAME_SIZE as u32);
 
     let mut vst_host = VstHost::new(SAMPLE_RATE as f32);
-    vst_host.create_device(
-        "/Library/Audio/Plug-Ins/VST/chipsynth SFC.vst/Contents/MacOS/chipsynth SFC".to_string(),
-        "data/schala_inst.fxp".to_string(),
-    );
 
-    vst_host.create_device(
-        "/Library/Audio/Plug-Ins/VST/chipsynth SFC.vst/Contents/MacOS/chipsynth SFC".to_string(),
-        "data/schala_perc.fxp".to_string(),
-    );
+    for project_device in project.devices {
+        vst_host.create_device(
+            project_device.name,
+            project_device.vst_name,
+            project_base_path
+                .join(project_device.preset)
+                .to_str()
+                .unwrap()
+                .to_string(),
+            project_device.mix_level,
+            project_device.device_filter,
+        );
+    }
 
     let event_loop = EventLoop::new();
-    let windows: Vec<Window> = vec![
-        WindowBuilder::new().build(&event_loop).unwrap(),
-        WindowBuilder::new().build(&event_loop).unwrap(),
-    ];
+    let windows: Vec<Window> = vst_host
+        .devices
+        .iter()
+        .map(|_| WindowBuilder::new().build(&event_loop).unwrap())
+        .collect();
 
-    let mut last_position: Option<PhysicalPosition<i32>> = None;
+    let mut last_position: Option<PhysicalPosition<i32>> = Some(PhysicalPosition { x: 1200, y: 5 });
 
     for (i, device) in vst_host.devices.iter_mut().enumerate() {
         let window = &windows[i];
-        let editor = device.get_editor();
+        let editor = device.plugin.get_editor();
         if let Some(mut x) = editor {
             x.open(window.ns_view());
             let (w, h) = x.size();
             window.set_resizable(false);
             window.set_inner_size(LogicalSize::new(w as f32, h as f32));
-            window.set_title(&format!("{} (Device {})", &device.get_info().name, i));
+            window.set_title(&format!(
+                "{} ({}: {})",
+                device.name,
+                i,
+                &device.plugin.get_info().name,
+            ));
             if let Some(PhysicalPosition { x, y }) = last_position {
                 // position window below/right from the previous
-                window.set_outer_position(PhysicalPosition::new(x + 40, y + 40));
-            }
-            if let Ok(PhysicalPosition { x, y }) = window.outer_position() {
+                window.set_outer_position(PhysicalPosition::new(x, y + 60));
+                last_position = Some(PhysicalPosition::new(x, y + 60));
+            } else if let Ok(PhysicalPosition { x, y }) = window.outer_position() {
                 last_position = Some(PhysicalPosition::new(x, y));
             }
         }
     }
 
     let _vst_processing_thread = thread::spawn(move || {
-        let bytes = fs::read("data/schala.mid").unwrap();
+        let bytes = fs::read(sequence).unwrap();
         let smf = Smf::parse(&bytes).unwrap();
         let sequence: Rc<midi_player::MidiSequence> = Rc::new(smf.into());
 
@@ -77,10 +126,19 @@ fn main() {
         let mut outputs = vec![vec![0.0; FRAME_SIZE]; 2];
         let mut audio_buffer = host_buffer.bind(&inputs, &mut outputs);
         const STEP: usize = 16;
-        let mut midi_players = vec![
-            MidiPlayer::new(sequence.clone(), SAMPLE_RATE as f32, FRAME_SIZE, 0),
-            MidiPlayer::new(sequence.clone(), SAMPLE_RATE as f32, FRAME_SIZE, 1),
-        ];
+        let mut midi_players: Vec<MidiPlayer> = vst_host
+            .devices
+            .iter()
+            .map(|d| {
+                MidiPlayer::new(
+                    sequence.clone(),
+                    SAMPLE_RATE as f32,
+                    FRAME_SIZE,
+                    d.device_filter,
+                )
+            })
+            .collect();
+
         println!("Starting MIDI player!");
 
         loop {
@@ -91,7 +149,7 @@ fn main() {
 
             for (i, events) in device_events.iter().enumerate() {
                 for evt in events {
-                    log_midi_event(i, evt);
+                    log_midi_event(&vst_host.devices[i], evt);
                 }
             }
 

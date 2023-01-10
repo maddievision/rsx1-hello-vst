@@ -11,6 +11,13 @@ use vst::{
     prelude::{AudioBuffer, Plugin, SendEventBuffer},
 };
 
+pub struct Device {
+    pub name: String,
+    pub plugin: PluginInstance,
+    pub device_filter: usize,
+    pub mix_level: f32,
+}
+
 pub struct SampleHost;
 
 impl Host for SampleHost {
@@ -21,7 +28,7 @@ impl Host for SampleHost {
 
 pub struct VstHost {
     host: Arc<Mutex<SampleHost>>,
-    pub devices: Vec<PluginInstance>,
+    pub devices: Vec<Device>,
     sample_rate: f32,
 }
 
@@ -35,14 +42,25 @@ impl VstHost {
         }
     }
 
-    pub fn create_device(&mut self, plugin_path: String, preset_path: String) -> usize {
+    pub fn create_device(
+        &mut self,
+        device_name: String,
+        plugin_name: String,
+        preset_path: String,
+        mix_level: f32,
+        device_filter: usize,
+    ) -> usize {
         let device_idx = self.devices.len();
-        let path = Path::new(&plugin_path);
+        let path = format!(
+            "/Library/Audio/Plug-Ins/VST/{}.vst/Contents/MacOS/{}",
+            plugin_name, plugin_name
+        );
+        let path = Path::new(&path);
 
         let mut loader = PluginLoader::load(path, self.host.clone()).unwrap();
         let mut plugin = loader.instance().unwrap();
 
-        println!("Loaded device {}: {}", device_idx, plugin.get_info().name);
+        println!("Loaded device {}: {}", device_name, plugin.get_info().name);
         plugin.set_sample_rate(self.sample_rate);
 
         println!("Loading device {} preset: {}", device_idx, preset_path);
@@ -55,7 +73,12 @@ impl VstHost {
         plugin.resume();
         println!("Initialized device {}!", device_idx);
 
-        self.devices.push(plugin);
+        self.devices.push(Device {
+            name: device_name,
+            plugin,
+            device_filter,
+            mix_level,
+        });
 
         device_idx
     }
@@ -73,16 +96,16 @@ impl VstHost {
             let events = &device_events[idx];
             if events.len() > 0 {
                 send_event_buffer.store_events(events.as_slice());
-                device.process_events(send_event_buffer.events());
+                device.plugin.process_events(send_event_buffer.events());
             }
 
-            device.process(audio_buffer);
+            device.plugin.process(audio_buffer);
             let (_, outputs) = audio_buffer.split();
 
             for c in 0..outputs.len() {
                 let output = outputs.get(c);
                 for (i, sample) in output.iter().enumerate() {
-                    frame[i * 2 + c] += *sample;
+                    frame[i * 2 + c] += *sample * device.mix_level;
                 }
             }
         }

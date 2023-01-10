@@ -1,0 +1,70 @@
+name: "World Revolution"
+description: The MIDI file is a sequence of World Revolution from Chrono Trigger, and the chipsynth SFC instance presets are loaded with samples from the original song.
+project_file_version: 0
+devices:
+  - name: synth
+    vst_name: chipsynth SFC
+    preset: 00.fxp
+    mix_level: 0.4
+    device_filter: 0
+  - name: organ
+    vst_name: chipsynth SFC
+    preset: 01.fxp
+    mix_level: 0.4
+    device_filter: 1
+  - name: stacatto strings
+    vst_name: chipsynth SFC
+    preset: 02.fxp
+    mix_level: 0.4
+    device_filter: 2
+  - name: back strings
+    vst_name: chipsynth SFC
+    preset: 03.fxp
+    mix_level: 0.4
+    device_filter: 3
+  - name: lead strings
+    vst_name: chipsynth SFC
+    preset: 04.fxp
+    mix_level: 0.4
+    device_filter: 4
+  - name: flute
+    vst_name: chipsynth SFC
+    preset: 05.fxp
+    mix_level: 0.4
+    device_filter: 5
+  - name: stacatto trumpet
+    vst_name: chipsynth SFC
+    preset: 06.fxp
+    mix_level: 0.6
+    device_filter: 6
+  - name: sustain trumpet
+    vst_name: chipsynth SFC
+    preset: 07.fxp
+    mix_level: 0.7
+    device_filter: 7
+  - name: french horn
+    vst_name: chipsynth SFC
+    preset: 08.fxp
+    mix_level: 0.4
+    device_filter: 8
+  - name: timpani
+    vst_name: chipsynth SFC
+    preset: 09.fxp
+    mix_level: 0.7
+    device_filter: 9
+  - name: snare
+    vst_name: chipsynth SFC
+    preset: 10.fxp
+    mix_level: 0.7
+    device_filter: 10
+  - name: tambourine
+    vst_name: chipsynth SFC
+    preset: 11.fxp
+    mix_level: 0.7
+    device_filter: 11
+  - name: crash
+    vst_name: chipsynth SFC
+    preset: 12.fxp
+    mix_level: 0.7
+    device_filter: 12
+sequence: worldrev.mid
