@@ -87,7 +87,7 @@ impl VstHost {
         device_idx
     }
 
-    pub fn process_audio(&mut self, tx: Sender<Vec<f32>>, device_events: Vec<Vec<MidiEvent>>) {
+    pub fn process_audio(&mut self, tx: Sender<Vec<f32>>, device_events: &Vec<Vec<MidiEvent>>) {
         let mut frame: Vec<f32> = vec![0.0; self.frame_size * 2];
         let mut send_event_buffer = SendEventBuffer::new(EVENT_BUFFER_SIZE);
 

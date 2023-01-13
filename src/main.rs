@@ -2,12 +2,19 @@ const FRAME_SIZE: usize = 1024;
 const SAMPLE_RATE: u32 = 48000;
 
 use crossbeam::channel::bounded;
-use midi_logger::log_midi_event;
+use midi_logger::{MidiLogFilter, MidiLogger};
 use midi_player::MidiPlayer;
 use midly::Smf;
+use rustop::opts;
 use sample_host::VstHost;
 use serde::{Deserialize, Serialize};
-use std::{env, fs, path::Path, rc::Rc, thread};
+use std::{
+    fs,
+    path::Path,
+    rc::Rc,
+    sync::{Arc, Mutex},
+    thread,
+};
 use vst::prelude::Plugin;
 use winit::{
     dpi::{LogicalSize, PhysicalPosition},
@@ -43,12 +50,24 @@ pub struct Project {
 }
 
 fn main() {
-    let args: Vec<String> = env::args().collect();
-    if args.len() < 2 {
-        panic!("no filename supplied!!")
+    let (args, _rest) = opts! {
+        synopsis "Simple VST MIDI player";
+        opt note_on_log:bool=true, short:'n', desc:"Don’t log note-on messages.";
+        opt loops_log:bool=true, short:'l', desc:"Don’t log loop commands.";
+        opt note_off_log:bool, short:'o', desc:"Log note-off messages.";
+        opt controller_log:bool, short:'c', desc:"Log controller messages.";
+        opt pitch_log:bool, short:'p', desc:"Log pitch messages.";
+        opt open_vst_editors:bool, short:'e', desc:"Open VST editors.";
+        param project_path:String, desc:"Path to project containing project.yml file";
     }
+    .parse_or_exit();
 
-    let project_base_path = Path::new(&args[1]);
+    let event_loop = EventLoop::new();
+    let main_window = WindowBuilder::new().build(&event_loop).unwrap();
+    main_window.set_title("nutrax");
+    let mut windows: Vec<Window> = vec![];
+
+    let project_base_path = Path::new(&args.project_path);
     let project_data = fs::read(project_base_path.join("project.yml")).unwrap();
     let project: Project = serde_yaml::from_slice(&project_data).unwrap();
 
@@ -65,75 +84,86 @@ fn main() {
     let (tx, rx) = bounded::<Vec<f32>>(8);
     let _stream = audio_host::start(rx.clone(), SAMPLE_RATE, FRAME_SIZE as u32);
 
-    let mut vst_host = VstHost::new(SAMPLE_RATE as f32, FRAME_SIZE);
+    let vst_host = Arc::new(Mutex::new(VstHost::new(SAMPLE_RATE as f32, FRAME_SIZE)));
 
-    for project_device in project.devices {
-        let preset_path = match project_device.preset {
-            Some(preset) => Some(project_base_path.join(preset).to_str().unwrap().to_string()),
-            None => None,
-        };
+    if let Ok(mut vst_host) = vst_host.lock() {
+        for project_device in project.devices {
+            let preset_path = match project_device.preset {
+                Some(preset) => Some(project_base_path.join(preset).to_str().unwrap().to_string()),
+                None => None,
+            };
 
-        vst_host.create_device(
-            project_device.name,
-            project_device.vst_name,
-            preset_path,
-            project_device.mix_level,
-            project_device.device_filter,
-        );
-    }
+            vst_host.create_device(
+                project_device.name,
+                project_device.vst_name,
+                preset_path,
+                project_device.mix_level,
+                project_device.device_filter,
+            );
+        }
 
-    let event_loop = EventLoop::new();
-    let windows: Vec<Window> = vst_host
-        .devices
-        .iter()
-        .map(|_| WindowBuilder::new().build(&event_loop).unwrap())
-        .collect();
+        let mut last_position: Option<PhysicalPosition<i32>> =
+            Some(PhysicalPosition { x: 1200, y: 5 });
 
-    let mut last_position: Option<PhysicalPosition<i32>> = Some(PhysicalPosition { x: 1200, y: 5 });
-
-    for (i, device) in vst_host.devices.iter_mut().enumerate() {
-        let window = &windows[i];
-        let editor = device.plugin.get_editor();
-        if let Some(mut x) = editor {
-            x.open(window.ns_view());
-            let (w, h) = x.size();
-            window.set_resizable(false);
-            window.set_inner_size(LogicalSize::new(w as f32, h as f32));
-            window.set_title(&format!(
-                "{} ({}: {})",
-                device.name,
-                i,
-                &device.plugin.get_info().name,
-            ));
-            if let Some(PhysicalPosition { x, y }) = last_position {
-                // position window below/right from the previous
-                window.set_outer_position(PhysicalPosition::new(x, y + 60));
-                last_position = Some(PhysicalPosition::new(x, y + 60));
-            } else if let Ok(PhysicalPosition { x, y }) = window.outer_position() {
-                last_position = Some(PhysicalPosition::new(x, y));
+        if args.open_vst_editors {
+            for (i, device) in vst_host.devices.iter_mut().enumerate() {
+                let editor = device.plugin.get_editor();
+                if let Some(mut x) = editor {
+                    let window = WindowBuilder::new().build(&event_loop).unwrap();
+                    window.set_title(&format!(
+                        "{} ({}: {})",
+                        device.name,
+                        i,
+                        &device.plugin.get_info().name
+                    ));
+                    x.open(window.ns_view());
+                    if let Some(PhysicalPosition { x, y }) = last_position {
+                        // position window below/right from the previous
+                        window.set_outer_position(PhysicalPosition::new(x, y + 60));
+                        last_position = Some(PhysicalPosition::new(x, y + 60));
+                    } else if let Ok(PhysicalPosition { x, y }) = window.outer_position() {
+                        last_position = Some(PhysicalPosition::new(x, y));
+                    }
+                    let (w, h) = x.size();
+                    window.set_inner_size(LogicalSize::new(w as f32, h as f32));
+                    window.set_resizable(false);
+                    windows.push(window);
+                }
             }
         }
     }
+
+    let vstd = vst_host.clone();
+    let vste = vst_host.clone();
 
     let _vst_processing_thread = thread::spawn(move || {
         let bytes = fs::read(sequence).unwrap();
         let smf = Smf::parse(&bytes).unwrap();
         let sequence: Rc<midi_player::MidiSequence> = Rc::new(smf.into());
+        let mut midi_players: Vec<MidiPlayer> = vec![];
 
-        let mut midi_players: Vec<MidiPlayer> = vst_host
-            .devices
-            .iter()
-            .map(|d| {
-                MidiPlayer::new(
+        if let Ok(vst_host) = vstd.lock() {
+            for d in &vst_host.devices {
+                let midi_player = MidiPlayer::new(
                     sequence.clone(),
                     SAMPLE_RATE as f32,
                     FRAME_SIZE,
                     d.device_filter,
-                )
-            })
-            .collect();
+                );
+
+                midi_players.push(midi_player);
+            }
+        }
 
         println!("Starting MIDI player!");
+
+        let logger = MidiLogger::new(MidiLogFilter {
+            note_on: args.note_on_log,
+            note_off: args.note_off_log,
+            ctrl: args.controller_log,
+            pitch: args.pitch_log,
+            loops: args.loops_log,
+        });
 
         loop {
             let device_events = midi_players
@@ -141,24 +171,41 @@ fn main() {
                 .map(|mp| mp.get_next_events())
                 .collect::<Vec<_>>();
 
-            for (i, events) in device_events.iter().enumerate() {
-                for evt in events {
-                    log_midi_event(&vst_host.devices[i], evt);
+            if let Ok(mut vst_host) = vstd.lock() {
+                vst_host.process_audio(tx.clone(), &device_events);
+                for (i, events) in device_events.iter().enumerate() {
+                    for evt in events {
+                        logger.log_midi_event(&vst_host.devices[i], evt);
+                    }
                 }
             }
-
-            vst_host.process_audio(tx.clone(), device_events);
         }
     });
 
     event_loop.run(move |event, _, control_flow| {
-        *control_flow = ControlFlow::Wait;
+        *control_flow = ControlFlow::Poll;
 
         match event {
             Event::WindowEvent {
                 event: WindowEvent::CloseRequested,
                 window_id,
-            } if windows.iter().any(|w| window_id == w.id()) => *control_flow = ControlFlow::Exit,
+            } => {
+                if window_id == main_window.id() {
+                    *control_flow = ControlFlow::Exit
+                }
+                if let Ok(mut vst_host) = vste.lock() {
+                    for (i, window) in windows.iter_mut().enumerate() {
+                        if window.id() == window_id {
+                            let d = &mut vst_host.devices[i];
+                            if let Some(mut e) = d.plugin.get_editor() {
+                                e.close();
+                                window.set_visible(false);
+                            }
+                        }
+                    }
+                }
+            }
+
             _ => (),
         }
     });
