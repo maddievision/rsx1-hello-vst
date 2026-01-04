@@ -9,6 +9,8 @@ Sample VST instrument host that can load a project file defining VST instruments
 
 Note that [chipsynth SFC](https://www.plogue.com/products/chipsynth-sfc.html) is required to run this as-is, but you can stub out the path for a different VST instrument.
 
-Video example: https://streamable.com/f98brn
+Video examples:
+- [Chrono Trigger - World Revolution](https://streamable.com/u34m4c) - MIDI conversion played through chipsynth SFC
+- [Chrono Trigger - Schala's Theme](https://streamable.com/7c2b1g) - MIDI conversion played through chipsynth SFC
 
 ![Preview](/preview.png)
